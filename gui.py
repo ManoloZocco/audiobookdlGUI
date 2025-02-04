@@ -1,13 +1,14 @@
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QGroupBox, QGridLayout,
                                QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QTextEdit,
                                QPushButton, QFileDialog, QCheckBox, QComboBox, QPlainTextEdit)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal  # Modifica: aggiunto Signal
 from PySide6.QtGui import QIcon
 import subprocess, threading, os, sys, json
 from functools import partial  # aggiunto insieme agli altri import
-from audiobookdl.utils import transform_storytel_url  # aggiunto import della funzione comune
 
 class AudiobookDownloaderGUI(QMainWindow):
+    output_signal = Signal(str)  # Nuovo segnale per aggiornare l'output in modo thread-safe
+
     def __init__(self):
         super().__init__()
         # Definizione lingua predefinita e dizionario traduzioni
@@ -139,6 +140,8 @@ class AudiobookDownloaderGUI(QMainWindow):
         self.create_widgets()
         self.load_credentials()
         self.center_window()
+        # Collega il segnale per aggiornare l'output
+        self.output_signal.connect(self.output_text.appendPlainText)
     
     @staticmethod
     def label_with_help(text, tooltip):
@@ -399,11 +402,30 @@ class AudiobookDownloaderGUI(QMainWindow):
         self.save_credentials()
         cmd = ["audiobook-dl"]
         
-        urls = self.url_text.toPlainText().strip().splitlines()
-        # Trasforma ogni link Storytel utilizzando la funzione comune
-        urls = [transform_storytel_url(u) for u in urls]
-        if urls:
-            cmd.extend(urls)
+        # Debug: stampa il contenuto grezzo della textbox
+        raw_content = self.url_text.toPlainText()
+        self.output_signal.emit(f"Contenuto grezzo della textbox:\n{raw_content}\n")
+        
+        # Gestione degli URL
+        urls_raw = raw_content.strip().splitlines()
+        self.output_signal.emit(f"URLs trovati: {len(urls_raw)}\n")
+        
+        urls = []
+        for u in urls_raw:
+            if u and u.strip():
+                stripped_url = u.strip()
+                self.output_signal.emit(f"Processando URL: {stripped_url}\n")
+                # Utilizza l'URL così com'è, senza trasformazione
+                urls.append(stripped_url)
+                self.output_signal.emit(f"URL aggiunto: {stripped_url}\n")
+
+        if not urls:  # Se non ci sono URL validi, mostra un errore
+            self.output_signal.emit("Errore: Nessun URL valido fornito. Assicurati di aver inserito almeno un URL valido.\n")
+            return
+        
+        # Aggiungi gli URL al comando
+        cmd.extend(urls)
+        
         input_file = self.input_file_entry.text().strip()
         if input_file:
             cmd.extend(["--input-file", input_file])
@@ -449,6 +471,10 @@ class AudiobookDownloaderGUI(QMainWindow):
             cmd.extend(["--config", config_file])
         
         download_dir = self.save_dir_entry.text().strip() or None
+
+        # Filtra la lista per eliminare eventuali None
+        cmd = [x for x in cmd if x is not None]
+        
         self.output_text.clear()
         # Modifica qui: converti tutti gli elementi in stringa, anche se sono None.
         self.output_text.appendPlainText("Esecuzione del comando:\n" + " ".join(str(x) for x in cmd) + "\n")
@@ -465,12 +491,12 @@ class AudiobookDownloaderGUI(QMainWindow):
                 cwd=cwd
             )
             for line in iter(process.stdout.readline, ''):
-                self.output_text.appendPlainText(line)
+                self.output_signal.emit(line)  # Modifica: usa il segnale invece di aggiornare direttamente
             process.stdout.close()
             process.wait()
-            self.output_text.appendPlainText("\nDownload terminato.\n")
+            self.output_signal.emit("\nDownload terminato.\n")
         except Exception as e:
-            self.output_text.appendPlainText("\nErrore: " + str(e) + "\n")
+            self.output_signal.emit("\nErrore: " + str(e) + "\n")
     
     def center_window(self):
         frameGm = self.frameGeometry()

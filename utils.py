@@ -1,33 +1,41 @@
-# utils.py
+import importlib.resources
+from typing import Sequence
+import shutil
 
-# ...existing code...
-def transform_storytel_url(url: str) -> str:
+def levenstein_distance(a: str, b: str) -> int:
     """
-    Trasforma url Storytel eliminando eventuali query string
-    e convertendo quelli con '/podcasts/' in formato '/books/'.
+    Calcola la distanza di Levenshtein tra due stringhe.
+    https://en.wikipedia.org/wiki/Levenshtein_distance
     """
-    url = url.split('?')[0]  # rimuove query string
-    if "/podcasts/" in url:
-        last_segment = url.rstrip('/').split('/')[-1]
-        url = f"https://www.storytel.com/it/books/{last_segment}"
-    return url
-# ...existing code...
-```
+    if len(a) == 0:
+        return len(b)
+    if len(b) == 0:
+        return len(a)
+    if a[0] == b[0]:
+        return levenstein_distance(a[1:], b[1:])
+    return 1 + min(
+        levenstein_distance(a, b[1:]),   # Inserimento
+        levenstein_distance(a[1:], b),     # Cancellazione
+        levenstein_distance(a[1:], b[1:])    # Sostituzione
+    )
 
-```python
-# gui.py
+def nearest_string(input: str, lst: Sequence[str]) -> str:
+    """
+    Ritorna l'elemento più vicino in `lst` a `input`
+    basato sulla distanza di Levenshtein.
+    """
+    return sorted(lst, key=lambda x: levenstein_distance(input, x))[0]
 
-# ...existing code...
-from utils import transform_storytel_url
+def read_asset_file(path: str) -> str:
+    """
+    Legge il file asset specificato nel percorso.
+    """
+    return importlib.resources.files("audiobookdl").joinpath(path).read_text(encoding="utf8")
 
-# ...existing code...
+def program_in_path(program: str) -> bool:
+    """
+    Verifica se il programma è presente nel PATH del sistema.
+    """
+    return shutil.which(program) is not None
 
-# Rimuovi la funzione locale e utilizza quella comune da utils.py
-# ...existing code...
-# url = url.split('?')[0]  # rimuove query string
-# if "/podcasts/" in url:
-#     last_segment = url.rstrip('/').split('/')[-1]
-#     url = f"https://www.storytel.com/it/books/{last_segment}"
-# ...existing code...
-url = transform_storytel_url(url)
-# ...existing code...
+# Eliminata la funzione transform_storytel_url per rimuovere il controllo e la trasformazione degli URL.
